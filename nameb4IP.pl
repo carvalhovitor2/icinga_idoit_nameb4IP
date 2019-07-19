@@ -130,21 +130,21 @@ sub compare{
         foreach my $names (@icinga_host_list){
                 foreach my $name (@$names){
 			if (!defined $name->{check_period}){
-				$name->{check_period} = "NO CHECK_PERIOD ASSIGNED";
-			}	
+				$name->{check_period} = "";
+			}
                         if ($hostname eq $name->{name} || $lc_hostname eq $name->{name} || $noSpace_hostname eq $name->{name} || $lcNoSpace_hostname eq $name->{name} ){
                                 if ( $host_ip eq $name->{attrs}->{address} ){
-                                        return "OK:$type:$hostname:$host_ip:$name->{check_period}\n";
+                                        return "$type:$hostname:$host_ip:$name->{check_period}:OK\n";
 					
                                 }
                                 else {
-                                        return "OUTDATED-MONITORED UNDER DIFFERENT IP-:$type:$hostname:$host_ip:$name->{check_period}:(IS BEING MONITORED UNDER THE IP OF $name->{attrs}->{address})\n";
+                                        return "$type:$hostname:$host_ip:$name->{check_period}:OUTDATED:MONITORED UNDER DIFFERENT IP ($name->{attrs}->{address}\n";
 								
                                 }
                         }
 
 			elsif($host_ip eq $name->{attrs}->{address}) {
-				return "OUTDATED-MONITORED UNDER DIFFERENT NAME-:$type:$hostname:$name->{attrs}->{address}:$name->{check_period}:(IS BEING MONITORED UNDER THE NAME OF $name->{name})\n";
+				return "$type:$hostname:$name->{attrs}->{address}:$name->{check_period}:OUTDATED:MONITORED UNDER DIFFERENT NAME($name->{name}\n";
 				
 			}
 
@@ -152,7 +152,7 @@ sub compare{
                 }
 
         }
-	return "NOT MONORITORED:$type:$hostname:$host_ip\n";
+	return "$type:$hostname:$host_ip:NOT MONITORED\n";
 
 }
 
