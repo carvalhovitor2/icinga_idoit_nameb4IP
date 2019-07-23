@@ -14,10 +14,10 @@ use HTTP::Request::Common;
 
 
 my $idoit_url = 'https://idoit.svc.eurotux.pt/i-doit/src/jsonrpc.php';
-my $idoit_apikey = "lk3cuqphh";
+my $idoit_apikey = "";
 my $icinga_url = 'https://localhost:5665/v1/objects/hosts';
-my $icinga_user = "root";
-my $icinga_password = "c1552fd540393237";
+my $icinga_user = "";
+my $icinga_password = "";
 my %group_type_hash = ('building' => 3,
 			'server' => 5,
 			'switch' => 8,
@@ -117,34 +117,53 @@ sub ICINGA_query_hosts{
 
 sub compare{
 	my @icinga_host_list = $_[0];
-        my $hostname = $_[1];
-	my $lc_hostname = lc($hostname);
-	my $noSpace_hostname= $hostname =~ s/\s//gr;
-	my $lcNoSpace_hostname = lc($noSpace_hostname);
-        my $host_ip = $_[2];
-	my $type = $_[3];
-        if (!defined $host_ip){
-                return "$type: $hostname:NO DOCUMENTED IP FOUND IN I-DOIT\n";
+        my $idoit_hostname = $_[1];
+	my $idoit_host_ip = $_[2];
+        my $type = $_[3];
+	#my $idoit_check_period = $_[4];
+	my $check_period;
+	my $state = "OK";
+	my $lc_idoit_hostname = lc($idoit_hostname);
+	my $noSpace_idoit_hostname= $idoit_hostname =~ s/\s//gr;
+	my $lcNoSpace_idoit_hostname = lc($noSpace_idoit_hostname);
+        if (!defined $idoit_host_ip){
+                return "$type: $idoit_hostname:NO DOCUMENTED IP FOUND IN I-DOIT\n";
         }
-	#print Dumper @icinga_host_list;
-        foreach my $names (@icinga_host_list){
-                foreach my $name (@$names){
-			if (!defined $name->{check_period}){
-				$name->{check_period} = "";
+        foreach my $response (@icinga_host_list){
+                foreach my $name (@$response){
+			if(!defined $name->{check_period}){
+				$check_period = "";
 			}
-                        if ($hostname eq $name->{name} || $lc_hostname eq $name->{name} || $noSpace_hostname eq $name->{name} || $lcNoSpace_hostname eq $name->{name} ){
-                                if ( $host_ip eq $name->{attrs}->{address} ){
-                                        return "$type:$hostname:$host_ip:$name->{check_period}:OK\n";
+			else{
+				$check_period = $name->{check_period};
+			}
+			
+
+                        if ($idoit_hostname eq $name->{name} || $lc_idoit_hostname eq $name->{name} || $noSpace_idoit_hostname eq $name->{name} || $lcNoSpace_idoit_hostname eq $name->{name} ){
+				#if ($idoit_check_period ne $check_period){
+				#       $name->{check_period} = "DIFFERENT CHECK PERIODS(idoit - $idoit_check_period || icinga - $name->{check_period}";
+				#	$state = "OUTDATED";
+				#}
+
+                                if ( $idoit_host_ip eq $name->{attrs}->{address} ){
+                                        return ":$type:$idoit_hostname:$idoit_host_ip:$check_period:$state\n";
 					
                                 }
                                 else {
-                                        return "$type:$hostname:$host_ip:$name->{check_period}:OUTDATED:MONITORED UNDER DIFFERENT IP ($name->{attrs}->{address}\n";
+					$state = "OUTDATED";
+                                        return "$type:$idoit_hostname:$idoit_host_ip:$check_period:MONITORED UNDER DIFFERENT IP ($name->{attrs}->{address}:$state\n";
 								
                                 }
                         }
 
-			elsif($host_ip eq $name->{attrs}->{address}) {
-				return "$type:$hostname:$name->{attrs}->{address}:$name->{check_period}:OUTDATED:MONITORED UNDER DIFFERENT NAME($name->{name}\n";
+			elsif($idoit_host_ip eq $name->{attrs}->{address}){	
+				#if ($idoit_check_period ne $name->{check_period}){
+				#       $name->{check_period} = "DIFFERENT CHECK PERIODS(idoit - $idoit_check_period || icinga - $name->{check_period}";
+				#       $state = "OUTDATED";
+				#}
+
+
+				return "$type:$idoit_hostname:$name->{attrs}->{address}:$check_period:MONITORED UNDER DIFFERENT NAME($name->{name}:$state\n";
 				
 			}
 
@@ -152,7 +171,7 @@ sub compare{
                 }
 
         }
-	return "$type:$hostname:$host_ip:NOT MONITORED\n";
+	return "$type:$idoit_hostname:$idoit_host_ip:NOT MONITORED\n";
 
 }
 
@@ -166,7 +185,10 @@ sub compare{
 
 my @host_types;
 GetOptions('type=s' => \@host_types,
-		'a|all' => \my $all) or die "Wrong syntax!\nUsage: $0 --type {server, client, switch, printer, storage, virtual, building, accesspoint, appliance}\n ";
+		'a|all' => \my $all,
+		'u|user=s' => \$icinga_user,
+		'p|pass=s' => \$icinga_password,
+		'k|key=s' => \$idoit_apikey) or die "Wrong syntax!\nUsage: $0 --type {server, client, switch, printer, storage, virtual, building, accesspoint, appliance}\n ";
 
 if(!defined $host_types[0] && !defined $all){
 	print  "Wrong syntax!\nUsage: $0 --type {server, client, switch, printer, storage, virtual, building, accesspoint, appliance} ||  -a (--all)\n ";
@@ -181,17 +203,17 @@ foreach my $type (@host_types){
 	my $responseJSON = IDOIT_listREQUEST($group_type_hash{$type}, $idoit_apikey, $idoit_url);
 	my @idoit_host_list = ($responseJSON->{result});
 		#Query icinga hosts
- 	       my $icinga_response = ICINGA_query_hosts($icinga_url, $icinga_user, $icinga_password);
- 	       my @icinga_host_list = ($icinga_response->{results});
- 	       #fetches IP and compares
- 	       foreach my $result (@idoit_host_list){
- 	       	foreach my $host (@$result){
- 	       		my $ip_response = IDOIT_general_REQUEST($idoit_url, IDOIT_cat_read_GENERATOR($host->{id},"C__CATG__IP", $idoit_apikey), $idoit_apikey);
- 	       		print my $comparison = compare(@icinga_host_list, $host->{title}, $ip_response->{result}->[0]->{primary_hostaddress}->{ref_title}, $type);		
- 	       	}	
- 	       }	        
- 	                       
-
+	       my $icinga_response = ICINGA_query_hosts($icinga_url, $icinga_user, $icinga_password);
+	       my @icinga_host_list = ($icinga_response->{results});
+	       #fetches IP and compares
+	       foreach my $result (@idoit_host_list){
+	       		foreach my $host (@$result){
+	       			my $ip_response = IDOIT_general_REQUEST($idoit_url, IDOIT_cat_read_GENERATOR($host->{id},"C__CATG__IP", $idoit_apikey), $idoit_apikey);
+				#my $check_period_response = IDOIT_general_REQUEST($idoit_url, IDOIT_cat_read_GENERATOR($host->{id},"C__CATG__CONTRACT", $idoit_apikey), $idoit_apikey);
+	       			print my $comparison = compare(@icinga_host_list, $host->{title}, $ip_response->{result}->[0]->{primary_hostaddress}->{ref_title}, $type);		
+	       		}	
+	       }	        
+	              
 }	
 
 
